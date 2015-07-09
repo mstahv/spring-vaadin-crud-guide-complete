@@ -1,16 +1,13 @@
 package hello;
 
-import com.vaadin.data.fieldgroup.BeanFieldGroup;
-import com.vaadin.event.ShortcutAction;
-import com.vaadin.server.FontAwesome;
 import com.vaadin.spring.annotation.SpringComponent;
 import com.vaadin.spring.annotation.UIScope;
-import com.vaadin.ui.Button;
-import com.vaadin.ui.CssLayout;
+import com.vaadin.ui.Component;
 import com.vaadin.ui.TextField;
-import com.vaadin.ui.VerticalLayout;
-import com.vaadin.ui.themes.ValoTheme;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.vaadin.viritin.MBeanFieldGroup;
+import org.vaadin.viritin.form.AbstractForm;
+import org.vaadin.viritin.layouts.MVerticalLayout;
 
 /**
  * A simple very simple form built form bolts and nuts. As your real application
@@ -19,45 +16,34 @@ import org.springframework.beans.factory.annotation.Autowired;
  * in VaadinUI.
  * <p>
  * In a real world application you'll most likely using a super class for your
- * forms - less code, better UX. See e.g. AbstractForm in Virin
+ * forms - less code, better UX. See e.g. AbstractForm in Viritin
  * (https://vaadin.com/addon/viritin).
  */
 @SpringComponent
 @UIScope
-public class CustomerEditor extends VerticalLayout {
+public class CustomerEditor extends AbstractForm<Customer> {
 
     @Autowired
     CustomerRepository repository;
-
-    /**
-     * The currently edited customer
-     */
-    private Customer customer;
 
     /* Fields to edit customer properties */
     TextField firstName = new TextField("First name");
     TextField lastName = new TextField("Last name");
 
-    /* Action buttons */
-    Button save = new Button("Save", FontAwesome.SAVE);
-    Button cancel = new Button("Cancel");
-    Button delete = new Button("Delete", FontAwesome.TRASH_O);
-    CssLayout actions = new CssLayout(save, cancel, delete);
-
     public CustomerEditor() {
-        addComponents(firstName, lastName, actions);
-
-        // Configure and style components
-        setSpacing(true);
-        actions.setStyleName(ValoTheme.LAYOUT_COMPONENT_GROUP);
-        save.setStyleName(ValoTheme.BUTTON_PRIMARY);
-        save.setClickShortcut(ShortcutAction.KeyCode.ENTER);
-
         // wire action buttons to save, delete reset
-        save.addClickListener(e -> repository.save(customer));
-        delete.addClickListener(e -> repository.delete(customer));
-        cancel.addClickListener(e -> editCustomer(customer));
+        setSavedHandler(entity->repository.save(entity));
+        setResetHandler(entity->setEntity(entity));
         setVisible(false);
+    }
+
+    @Override
+    protected Component createContent() {
+        return new MVerticalLayout(
+                firstName,
+                lastName,
+                getToolbar()
+        ).withMargin(false);
     }
 
     public interface ChangeHandler {
@@ -65,34 +51,26 @@ public class CustomerEditor extends VerticalLayout {
         void onChange();
     }
 
-    public final void editCustomer(Customer c) {
-        final boolean persisted = c.getId() != null;
-        if (persisted) {
-            // Find fresh entity for editing
-            customer = repository.findOne(c.getId());
+    @Override
+    public MBeanFieldGroup<Customer> setEntity(Customer entity) {
+        // Edit fresh entity
+        final boolean persisted = entity.getId() != null;
+        if(persisted) {
+            entity = repository.findOne(entity.getId());
+            setDeleteHandler(customer->repository.delete(customer));
         } else {
-            customer = c;
+            setDeleteHandler(null);
         }
-        cancel.setVisible(persisted);
-
-        // Bind customer properties to similarly named fields
-        // Could also use annotation or "manual binding" or programmatically
-        // moving values from fields to entities before saving
-        BeanFieldGroup.bindFieldsUnbuffered(customer, this);
-
         setVisible(true);
-        
-        // A hack to ensure the whole form is visible
-        save.focus();
-        // Select all text in firstName field automatically
-        firstName.selectAll();
+        focusFirst();
+        return super.setEntity(entity);
     }
 
     public void setChangeHandler(ChangeHandler h) {
         // ChangeHandler is notified when either save or delete
         // is clicked
-        save.addClickListener(e -> h.onChange());
-        delete.addClickListener(e -> h.onChange());
+        getSaveButton().addClickListener(e -> h.onChange());
+        getDeleteButton().addClickListener(e -> h.onChange());
     }
 
 }
